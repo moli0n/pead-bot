@@ -59,13 +59,29 @@ if ALPACA_KEY and ALPACA_SECRET:
     except Exception as e:
         print(f"Alpaca failed: {e}")
 
-spy = yf.download("SPY", period="5d", interval="1d", progress=False)
-if not spy.empty:
-    close_val = spy["Close"].iloc[-1]
-    if hasattr(close_val, 'iloc'):
-        close_val = close_val.iloc[0]
-    print(f"SPY: {float(close_val):.2f}")
-    log("SPY", "PRICE", f"{float(close_val):.2f}")
+# === PIPELINE: EDGAR → SUE ===
+print("\n=== Pipeline SUE ===")
+tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "JPM", "V", "JNJ"]
 
-print("=== Done ===")
+for ticker in tickers:
+    try:
+        stock = yf.Ticker(ticker)
+        earnings = stock.earnings_dates
+        if earnings is None or earnings.empty:
+            continue
+        eps = stock.quarterly_earnings
+        if eps is None or len(eps) < 5:
+            continue
+        eps_list = eps["Earnings"].dropna().values
+        if len(eps_list) < 5:
+            continue
+        sue = eps_list[-1] - eps_list[-5]
+        sue_std = eps_list[-8:].std() if len(eps_list) >= 8 else eps_list.std()
+        sue_norm = round(sue / sue_std, 2) if sue_std != 0 else 0
+        print(f"{ticker}: SUE={sue_norm}")
+        log(ticker, "SUE", f"{sue_norm}")
+    except Exception as e:
+        print(f"{ticker}: error {e}")
+
+print("\n=== Selesai ===")
 conn.close()
