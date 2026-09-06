@@ -1,6 +1,5 @@
 """
 PEAD Bot — Daily pipeline runner.
-Jalan otomatis tiap hari lewat GitHub Actions.
 """
 import os
 import sqlite3
@@ -18,7 +17,7 @@ conn = sqlite3.connect(DB_PATH)
 conn.execute("""CREATE TABLE IF NOT EXISTS signals (
     ticker TEXT, filing_date DATE, eps_q REAL, eps_q4 REAL,
     sue REAL, sue_percentile REAL, tone_score REAL, tone_label TEXT,
-    entry_price REAL, entry_date DATE, status TEXT DEFAULT 'pending'
+    entry_price REAL, entry_date REAL, status TEXT DEFAULT 'pending'
 )""")
 conn.execute("""CREATE TABLE IF NOT EXISTS logs (
     run_date DATE, ticker TEXT, action TEXT, message TEXT
@@ -34,17 +33,16 @@ print("=== PEAD Bot ===", datetime.now())
 
 if OPENROUTER_KEY:
     headers = {"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"}
-    payload = {"model": "meta-llama/llama-3.3-70b-instruct:free",
+    payload = {"model": "openrouter/auto",
                "messages": [{"role": "user", "content": "Say 'PEAD bot ready'"}]}
     try:
         r = requests.post("https://openrouter.ai/api/v1/chat/completions",
                           headers=headers, json=payload, timeout=30)
         if r.status_code == 200:
-            msg = r.json()["choices"][0]["message"]["content"]
-            print(f"OpenRouter: {msg[:50]}")
-            log("SYSTEM", "OPENROUTER_TEST", msg[:50])
+            print("OpenRouter: OK")
+            log("SYSTEM", "OPENROUTER_TEST", "OK")
         else:
-            print(f"OpenRouter error: {r.status_code}")
+            print(f"OpenRouter: {r.status_code}")
     except Exception as e:
         print(f"OpenRouter failed: {e}")
 
@@ -54,17 +52,20 @@ if ALPACA_KEY and ALPACA_SECRET:
         r = requests.get(f"{ALPACA_BASE}/v2/account", headers=headers, timeout=15)
         if r.status_code == 200:
             acct = r.json()
-            print(f"Alpaca: ${acct['equity']} equity")
+            print(f"Alpaca: ${float(acct['equity']):.2f}")
             log("SYSTEM", "ALPACA_TEST", f"equity={acct['equity']}")
         else:
-            print(f"Alpaca error: {r.status_code}")
+            print(f"Alpaca: {r.status_code}")
     except Exception as e:
         print(f"Alpaca failed: {e}")
 
 spy = yf.download("SPY", period="5d", interval="1d", progress=False)
 if not spy.empty:
-    print(f"SPY: {spy['Close'].iloc[-1]:.2f}")
-    log("SPY", "PRICE", f"{spy['Close'].iloc[-1]:.2f}")
+    close_val = spy["Close"].iloc[-1]
+    if hasattr(close_val, 'iloc'):
+        close_val = close_val.iloc[0]
+    print(f"SPY: {float(close_val):.2f}")
+    log("SPY", "PRICE", f"{float(close_val):.2f}")
 
 print("=== Done ===")
 conn.close()
